@@ -414,7 +414,7 @@ def main():
     gemini_key = st.secrets.get("gemini_api", {}).get("api_key")
 
     if app_view == "📊 Public Fan Dashboard":
-        st.title("📊 The Neuberger World Cup")
+        st.title("📊 The NB World Cup")
         st.caption("Updated automatically from official game knockout data feeds.")
         
         tab_lead, tab_bracket, tab_feed = st.tabs([
@@ -484,10 +484,10 @@ def main():
             
             stage_geometry = {
                 "Round of 32":      {"start_pads": 0, "mid_pads": 0,  "total_slots": 16},
-                "Round of 16":      {"start_pads": 1, "mid_pads": 2.25,  "total_slots": 8},
-                "Quarter-Finals":   {"start_pads": 3.6, "mid_pads": 7.35,  "total_slots": 4},
-                "Semi-Finals":      {"start_pads": 8.5, "mid_pads": 17.5, "total_slots": 2},
-                "Finals":           {"start_pads": 18.5, "mid_pads": 0, "total_slots": 1}
+                "Round of 16":      {"start_pads": 1.05, "mid_pads": 2.48,  "total_slots": 8},
+                "Quarter-Finals":   {"start_pads": 3.6, "mid_pads": 7.8,  "total_slots": 4},
+                "Semi-Finals":      {"start_pads": 8.95, "mid_pads": 18.5, "total_slots": 2},
+                "Finals":           {"start_pads": 20.0, "mid_pads": 0, "total_slots": 1}
             }
        
             def render_team_markup(team_name, current_stage_title, opponent_name=None):
