@@ -4,14 +4,7 @@ import requests
 from streamlit_gsheets import GSheetsConnection
 from datetime import datetime, timedelta
 from streamlit_autorefresh import st_autorefresh
-
-try:
-    from google import genai
-    from google.genai import errors as core_exceptions
-
-except ImportError:
-    genai = None
-    core_exceptions = None
+from groq import Groq  # pip install groq
 
 st.set_page_config(
     page_title="Tournament Sweepstake Hub",
@@ -63,10 +56,9 @@ def check_secrets():
         "football_api": ["api_token"],
         "passwords": ["admin_password"],
         "connections": ["gsheets"],
-        "gemini_api": ["api_key"]
+        "groq_api": ["groq_api_key"]
     }
-    if not genai:
-        return False, "The 'google-genai' package is not installed.\nRun: pip install google-genai"
+
     for section, keys in required.items():
         if section not in st.secrets:
             return False, f"Missing section: [{section}] in secrets.toml"
@@ -76,18 +68,28 @@ def check_secrets():
     return True, ""
 
 # -------------------------------------------------------------
-# AI CORE UTILITIES (GEMINI 2.5)
+# AI CORE UTILITIES (GROQ)
 # -------------------------------------------------------------
+
 @st.cache_data(persist="disk", show_spinner=False)
 def get_gemini_summary(match_id, h_player, a_player, score_str, goal_info):
     """Generates post-match summary exactly ONCE per unique match data signature."""
-    api_key = st.secrets.get("gemini_api", {}).get("api_key")
-    if not api_key or not genai:
+    groq_api_key = st.secrets.get("groq_api", {}).get("groq_api_key")
+    if not groq_api_key or not Groq:
         return "AI integration offline."
         
     try:
-        client = genai.Client(api_key=api_key)
-        prompt = (
+        client = Groq(api_key=groq_api_key)
+
+        # A clear system instruction setting boundaries for clean, lighthearted wit
+        system_instruction = (
+            "You are a charismatic, playful, and incredibly witty football commentator. "
+            "Your tone should be clever, clever, and highly creative, but always remaining "
+            "positive and fun. Strictly avoid mean-spirited roasts, dark humor, or cynicism."
+        )
+
+        # Your structured sports variables
+        user_prompt = (
             f"Context: Football tournament match result.\n"
             f"Participants: {h_player} vs {a_player}.\n"
             f"Final Score: {score_str}.\n"
@@ -95,12 +97,20 @@ def get_gemini_summary(match_id, h_player, a_player, score_str, goal_info):
             f"Instruction: Generate a one-sentence fun, dramatic, and witty post-match commentary. "
             f"Do not include any emojis. Do not format with markdown bolding or asterisks. Be punchy."
         )
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=prompt
+
+        # Call the Grok API
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            # Ultra-fast model covered by free tier credits
+            messages=[
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": user_prompt}
+            ]
         )
-        if response and response.text:
-            return response.text.strip().replace('"', '').replace('*', '')
+
+        if response and response.choices:
+            ai_text = response.choices[0].message.content
+            return ai_text.strip().replace('"', '').replace('*', '')
         return "The match result left the AI speechless!"
     except Exception:
         return "What an incredible finish to this matchup!"
@@ -108,13 +118,18 @@ def get_gemini_summary(match_id, h_player, a_player, score_str, goal_info):
 @st.cache_data(persist="disk", show_spinner=False)
 def get_gemini_preview(match_id, h_player, a_player, h_prob, a_prob):
     """Generates upcoming match preview narrative exactly ONCE per match ID."""
-    api_key = st.secrets.get("gemini_api", {}).get("api_key")
-    if not api_key or not genai:
+    groq_api_key = st.secrets.get("groq_api", {}).get("groq_api_key")
+    if not groq_api_key or not Groq:
         return None
         
     try:
-        client = genai.Client(api_key=api_key)
-        prompt = (
+        client = Groq(api_key=groq_api_key)
+        system_instruction = (
+            "You are a charismatic, playful, and incredibly witty football commentator. "
+            "Your tone should be clever, clever, and highly creative, but always remaining "
+            "positive and fun. Strictly avoid mean-spirited roasts, dark humor, or cynicism."
+        )
+        user_prompt = (
             f"Context: Upcoming tournament sweepstake football match.\n"
             f"Matchup: {h_player} vs {a_player}.\n"
             f"Calculated Win Probabilities: {h_player} has a {h_prob:.0%} chance, while {a_player} has a {a_prob:.0%} chance.\n"
@@ -122,18 +137,25 @@ def get_gemini_preview(match_id, h_player, a_player, h_prob, a_prob):
             f"Use predictions, but do not include percentages in response."
             f"No emojis. No asterisks. The response should be funny."
         )
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=prompt
+        # Call the Grok API
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            # Ultra-fast model covered by free tier credits
+            messages=[
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": user_prompt}
+            ]
         )
-        if response and response.text:
-            return response.text.strip().replace('"', '').replace('*', '')
+        if response and response.choices:
+            ai_text = response.choices[0].message.content
+            return ai_text.strip().replace('"', '').replace('*', '')
     except Exception:
         return None
 
 # -------------------------------------------------------------
 # DYNAMIC FOOTBALL API DATA INGESTION ENGINE
 # -------------------------------------------------------------
+
 @st.cache_data(ttl=30)
 def fetch_live_tournament_data(api_token):
     stats = {}
@@ -411,10 +433,8 @@ def main():
         st.write("---")
         app_view = st.radio("Switch Dashboard View", ["📊 Public Fan Dashboard", "🔐 Admin Control Panel"])
 
-    gemini_key = st.secrets.get("gemini_api", {}).get("api_key")
-
     if app_view == "📊 Public Fan Dashboard":
-        st.title("📊 The NB World Cup")
+        st.title("📊 The World Cup Sweepstake")
         st.caption("Updated automatically from official game knockout data feeds.")
         
         tab_lead, tab_bracket, tab_feed = st.tabs([
@@ -471,9 +491,81 @@ def main():
                     column_config={"Owner": "Sweepstake Owner"}
                 )
 
+            # --- START OF TOURNAMENT MILESTONES SECTION ---
+            st.divider()
+            st.subheader("🏆 Tournament Milestone Bounties")
+            st.caption("Special sweepstake milestones achieved during the tournament (determined chronologically by non-simultaneous match order).")
+
+            # Custom card rendering utility supporting a white theme and image-based flag graphics
+            def render_milestone_card(title, team_name, metric_detail):
+                team_key = str(team_name).strip().upper()
+                entrant = team_to_player.get(team_key, "Unassigned")
+                
+                # Dynamic fallback if a crest image cannot be loaded
+                flag_html = "🏳️" 
+                
+                # Extract the high-res crest URL from the live dataframe to circumvent OS emoji rendering limitations
+                if not df_teams.empty:
+                    flag_match = df_teams[df_teams["Team"].str.upper() == team_key]
+                    if not flag_match.empty and "Flag" in flag_match.columns:
+                        flag_url = flag_match.iloc[0]["Flag"]
+                        if flag_url:
+                            flag_html = f"<img src='{flag_url}' width='26' style='vertical-align: middle; margin-right: 8px; border: 1px solid #e2e8f0; border-radius: 3px; flex-shrink: 0;'>"
+
+                st.markdown(
+                    f"""
+                    <div style="background-color: #ffffff; padding: 16px; border-radius: 10px; border: 1px solid #e2e8f0; border-left: 5px solid #38bdf8; margin-bottom: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                        <h5 style="margin: 0 0 6px 0; color: #475569; font-size: 0.95rem; font-weight: 600; letter-spacing: -0.01em;">{title}</h5>
+                        <p style="margin: 0; font-size: 1.1rem; font-weight: 700; color: #0f172a; display: flex; align-items: center; flex-wrap: nowrap;">
+                            {flag_html}
+                            <span style="margin-right: 6px;">{team_name}</span> 
+                            <span style="color: #64748b; font-weight: 400; margin: 0 4px;">—</span> 
+                            <span style="color: #0284c7; margin-left: 2px;">{entrant}</span>
+                        </p>
+                        <small style="color: #64748b; font-size: 0.85rem; display: block; margin-top: 6px; line-height: 1.3;">{metric_detail}</small>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+            # Establish responsive 2-column layout grids
+            col_m1, col_m2 = st.columns(2)
+
+            with col_m1:
+                render_milestone_card(
+                    title="🎯 First Goal from a Penalty",
+                    team_name="Switzerland",
+                    metric_detail="Successfully converted against Qatar."
+                )
+                
+                render_milestone_card(
+                    title="🤦‍♂️ First Own Goal",
+                    team_name="Paraguay",
+                    metric_detail="Deflected into their own net against USA."
+                )
+
+            with col_m2:
+                render_milestone_card(
+                    title="🟥 First Red Card",
+                    team_name="Saudi Arabia",
+                    metric_detail="Sent off during the tournament opener sequence."
+                )
+                
+                render_milestone_card(
+                    title="📉 Worst Team (Exited in Group Stage)",
+                    team_name="Iraq",
+                    metric_detail="Eliminated with 0 Points and a -11 Goal Difference."
+                )
+            # --- END OF TOURNAMENT MILESTONES SECTION ---
+            
             st.divider()
             st.subheader("🚩 Most Corners")
             st.info("Corner kick statistics are not provided by the current tournament data provider (football-data.org).")
+
+            st.space()
+            st.space()
+            st.space()
+            st.caption("Created By Devansh Gupta using Gemini")
                 
         with tab_bracket:
             st.subheader("Tournament Knockout Progression")
@@ -665,6 +757,11 @@ def main():
                             mid_height_px = geom["mid_pads"] * 54
                             st.html(f"<div style='height: {mid_height_px}px;'></div>")
 
+            st.space()
+            st.space()
+            st.space()
+            st.caption("Created By Devansh Gupta using Gemini")
+
         with tab_feed:
             # --- BST Night Logic Processing Block (4PM to 6AM Window) ---
             now_utc = datetime.utcnow()
@@ -797,6 +894,10 @@ def main():
                             preview = get_gemini_preview(m.get("id", 0), h_player, a_player, h_prob, a_prob)
                         if preview:
                              st.write(preview)
+            st.space()
+            st.space()
+            st.space()
+            st.caption("Created By Devansh Gupta using Gemini")
 
     # -------------------------------------------------------------
     # PANEL 2: PASSWORD PROTECTED ADMIN PANEL
